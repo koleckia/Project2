@@ -9,8 +9,7 @@ library(jsonlite)
 library(tidyverse)
 library(httr)
 library(lubridate)
-
-api_key <-a2a0e6a4de5aa1eed7f2d631ad8848ff
+library(ggplot2)
 
 
 #Function to obtain lat and log
@@ -33,8 +32,8 @@ get_lat_lon <- function(city="Philadelphia"){
 
 list_coordinates <- get_lat_lon()
 
-#Build function to query the API for daily temperatures 
-get_dailytemperatures <-function(lat,lon,units="imperial"){
+#Build function to query the API for daily weather
+get_dailyweather <-function(lat,lon,units="imperial"){
   
   #Query API for daily weather using lat and lon
   baseURL <-"https://api.openweathermap.org/data/3.0/onecall?"
@@ -43,45 +42,89 @@ get_dailytemperatures <-function(lat,lon,units="imperial"){
   URL_ids <- paste0(baseURL,endpoint)
   id_info <-httr::GET(URL_ids)
   str(id_info, max.level = 1)
-  parsed <- fromJSON(rawToChar(id_info$content))
+  df_parsed <- fromJSON(rawToChar(id_info$content))
   
-  #Create dataframe out of daily weather and clean it to make usable
-  df_daily <- df_parsed$daily |> 
+  #Create data frame for plots 
+  df_dailyplots <- df_parsed$daily |> 
     mutate(date=as.POSIXct(dt,format = "%Y-%m-%d")) 
   
-  #Create data frame out of hourly weather 
-  df_hourly <- df_parsed$hourly |> 
-    mutate(date=as.POSIXct(dt,format = "%Y-%m-%d")) 
-  
-  return(list(df1 =df_daily, df2=df_hourly))
+  df_dailyplots$date <-as.Date(df_dailyplots$date)
+  df_dailyplots <- as.data.frame(df_dailyplots)
+
+  return(df_dailyplots)
 }
 
-result <-get_dailytemperatures(list_coordinates[2],list_coordinates[3])
+df_daily_plots <-get_dailyweather(list_coordinates[2],list_coordinates[3])
 
-df_daily <-result[1]
-df_hourly <- result[2]
 
-#Get historical weather
-get_historicaltemperatures <- function(lat,lon,units="imperial",date="2025-07-03"){
-  #Query API for historical weather using lat and lon
+#Modify code to get data for entire week from a year ago 
+get_historicaltemperatures <- function(lat,lon,units="imperial"){
+  #Create vector to have the dates from the week last year 
+  today_date <- Sys.Date()
+  year_ago <- today_date - 365
+  week_year_ago <-as.Date(rep(NA,7))
+  
+  for(i in 0:6){
+    week_year_ago[i+1] <-year_ago + i
+  }
+  
+  #Query API for all dates 
+  results <- list()
+  for(i in 1:length(week_year_ago)){
+    
   baseURL <-"https://api.openweathermap.org/data/3.0/onecall/day_summary?"
-  endpoint <-paste0("lat=",lat,"&lon=",lon,"&date=",date,
+  endpoint <-paste0("lat=",lat,"&lon=",lon,"&date=",week_year_ago[i],
                     "&units=",units,
                     "&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
   URL_ids <- paste0(baseURL,endpoint)
   id_info <-httr::GET(URL_ids)
   str(id_info, max.level = 1)
   parsed <- fromJSON(rawToChar(id_info$content))
-  return(parsed)
-  #Creating a clean data frame 
+  results[[i]]<-parsed
 }
-historical_data <- get_historicaltemperatures(list_coordinates[2],list_coordinates[3])
-
-#Create some contingency tables 
-
-
+  print(results)
+}
+historical_data <- get_historicaltemperatures(lat= list_coordinates[2],lon= list_coordinates[3])
 
 
-#Create numerical summaries for some quantitative variables
+#Line Chart: Compares daily temperatures over 7 days at the different times of the day
+#Using df_daily_plots
+#Reformat data for the plot 
+df_dailytempplot <- df_daily_plots |>
+      select(date,starts_with("temp")) |>
+      unnest(temp) |>
+      pivot_longer(cols = c("day","night","eve","morn"),
+                   names_to= "time_of_day",
+                   values_to = "temperature") |>
+      select(-max,-min)
 
-#Create at least four plots utlizing coloring and grouping 
+#Create Plot 
+ggplot(df_dailytempplot , aes(x = date, y = temperature, color = time_of_day)) +
+  geom_line(size = 1.2) +
+  labs(title = "Daily Temperatures by Time Of Day",
+       x = "Date",
+       y = "Temperature",
+       color = "Time of Day") +
+  theme_minimal() 
+
+#Bar Chart: Looks at precipitation levels over the next 7 days
+#Reformat Data for the precipitation plot 
+df_dailyprecipitationplot <- df_daily_plots |>
+  select(date,rain) |>
+  mutate(rain =ifelse(is.na(rain),0,rain))
+
+
+#Create Plot 
+ggplot(df_dailyprecipitationplot, aes(x = date, y = rain)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Daily Precipitation",
+       x = "Date",
+       y = "Precipitation (mm)") +
+  theme_minimal()
+
+#Radar: Looks at the day temperature, humidity and wind over 7 days 
+#Reformat the Radar data 
+df_dailyradarplot<- df_daily_plots |>
+  unnest(temp) |>
+  select(date,day,humidity,wind_speed) 
+
