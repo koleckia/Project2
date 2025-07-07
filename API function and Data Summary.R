@@ -27,34 +27,41 @@ get_lat_lon <- function(city="Philadelphia"){
   #Saving the lat and lon and returning them into a list 
   lat <-parsed$lat
   lon <-parsed$lon
-  return(list=c(city=city,lat=lat,lon=lon))
+  return(list(city=city,lat=lat,lon=lon))
 }
 
-list_coordinates <- get_lat_lon()
-
-#Build function to query the API for daily weather
-get_dailyweather <-function(lat,lon,units="imperial"){
+get_dailyweather <- function(lat, lon, units = "imperial") {
+  baseURL <- "https://api.openweathermap.org/data/3.0/onecall?"
+  endpoint <- paste0("lat=", lat, "&lon=", lon, "&units=", units,
+                     "&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
+  URL_ids <- paste0(baseURL, endpoint)
+  id_info <- httr::GET(URL_ids)
   
-  #Query API for daily weather using lat and lon
-  baseURL <-"https://api.openweathermap.org/data/3.0/onecall?"
-  endpoint <-paste0("lat=",lat,"&lon=",lon,"&units=",units,
-                    "&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
-  URL_ids <- paste0(baseURL,endpoint)
-  id_info <-httr::GET(URL_ids)
-  str(id_info, max.level = 1)
+  if (id_info$status_code != 200) {
+    stop("API request failed: ", id_info$status_code)
+  }
+  
   df_parsed <- fromJSON(rawToChar(id_info$content))
   
-  #Create data frame for plots 
-  df_dailyplots <- df_parsed$daily |> 
-    mutate(date=as.POSIXct(dt,format = "%Y-%m-%d")) 
+  if (is.null(df_parsed$daily)) {
+    stop("No 'daily' weather data returned for this location.")
+  }
   
-  df_dailyplots$date <-as.Date(df_dailyplots$date)
+  df_dailyplots <- df_parsed$daily |>
+    mutate(date = as.Date(as.POSIXct(dt, origin = "1970-01-01", tz = "UTC"))) |>
+    unnest(weather)
+  
   df_dailyplots <- as.data.frame(df_dailyplots)
-
+  
   return(df_dailyplots)
 }
 
+
 df_daily_plots <-get_dailyweather(list_coordinates[2],list_coordinates[3])
+
+coords <- get_lat_lon("Chicago")
+df <- get_dailyweather(coords[2], coords[3], "imperial")
+View(df)
 
 
 #Modify code to get data for entire week from a year ago 
