@@ -49,7 +49,11 @@ get_dailyweather <- function(lat, lon, units = "imperial") {
   
   df_dailyplots <- df_parsed$daily |>
     mutate(date = as.Date(as.POSIXct(dt, origin = "1970-01-01", tz = "UTC"))) |>
-    unnest(weather)
+    unnest(weather)|>
+    select(-dt,-sunrise,-sunset,-moonrise,-moonset,-moon_phase,-id,-icon) |>
+    rename_with(~ ifelse(starts_with("temp$"),
+                         sub("temp$", "temperature_", .),
+                         .))
   
   df_dailyplots <- as.data.frame(df_dailyplots)
   
@@ -57,15 +61,12 @@ get_dailyweather <- function(lat, lon, units = "imperial") {
 }
 
 
-df_daily_plots <-get_dailyweather(list_coordinates[2],list_coordinates[3])
-
 coords <- get_lat_lon("Chicago")
 df <- get_dailyweather(coords[2], coords[3], "imperial")
 View(df)
 
 
-#Modify code to get data for entire week from a year ago 
-get_historicaltemperatures <- function(lat,lon,units="imperial"){
+get_historicaldata <- function(lat,lon,units="imperial"){
   #Create vector to have the dates from the week last year 
   today_date <- Sys.Date()
   year_ago <- today_date - 365
@@ -75,30 +76,59 @@ get_historicaltemperatures <- function(lat,lon,units="imperial"){
     week_year_ago[i+1] <-year_ago + i
   }
   
-  #Query API for all dates 
+  #Convert to work in API 
+  week_year_ago_timestamp<-as.numeric(as.POSIXct(paste0(week_year_ago, "17:00:00"), tz ="UTC"))
+  
+  #Query first API for daily temperatures
   results <- list()
   for(i in 1:length(week_year_ago)){
-  baseURL <-"https://api.openweathermap.org/data/3.0/onecall/day_summary?"
-  endpoint <-paste0("lat=",lat,"&lon=",lon,"&date=",week_year_ago[i],
-                    "&units=",units,
-                    "&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
-  URL_ids <- paste0(baseURL,endpoint)
-  id_info <-httr::GET(URL_ids)
-  str(id_info, max.level = 1)
-  parsed <- fromJSON(rawToChar(id_info$content))
-  results[[i]]<-parsed
+    baseURL <-"https://api.openweathermap.org/data/3.0/onecall/day_summary?"
+    endpoint <-paste0("lat=",lat,"&lon=",lon,"&date=",week_year_ago[i],
+                      "&units=",units,
+                      "&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
+    URL_ids <- paste0(baseURL,endpoint)
+    id_info <-httr::GET(URL_ids)
+    str(id_info, max.level = 1)
+    parsed <- fromJSON(rawToChar(id_info$content))
+    results[[i]]<-parsed
   }
   
+  #Turn temperatures list into a dataframe 
+  df_temperatures <-as.data.frame(do.call(rbind,results))
+  df_temperatures <- df_temperatures |>
+    unnest_wider(c(temperature),names_sep ="_" ) |>
+    unnest("date")|>
+    mutate(date=as.Date(date)) |>
+    select("date",starts_with("temperature"))
+  
+  #Query API for rest of weather data
+  list_results <- list()
+  for(i in 1:length(week_year_ago)){
+    baseURL <-"https://api.openweathermap.org/data/3.0/onecall/timemachine?"
+    endpoint <-paste0("lat=",lat,"&lon=",lon,"&dt=",week_year_ago_timestamp [i],
+                      "&units=",units,
+                      "&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
+    URL_ids <- paste0(baseURL,endpoint)
+    id_info <-httr::GET(URL_ids)
+    str(id_info, max.level = 1)
+    parsed <- fromJSON(rawToChar(id_info$content))
+    list_results[[i]]<-parsed
+  }
   #Turn list into a dataframe 
-  df_historical <-as.data.frame(do.call(rbind,results))
-  df_historical <- df_historical |>
-    unnest_wider(c(temperature,cloud_cover,humidity,precipitation,
-                   pressure,wind),names_sep ="_" ) |>
-    unnest_wider(wind_max,names_sep="_")
+  df_results <-as.data.frame(do.call(rbind,list_results))
+  
+  df_results <- df_results|>
+    unnest(data) |>
+    unnest(weather) |>
+    mutate(date = as.Date(as.POSIXct(dt, origin = "1970-01-01", tz = "UTC"))) |>
+    select(-temp,-dt,-sunrise,-sunset,-icon,-id)
+
+  df_combined <- full_join(df_results,df_temperatures,by="date")
+  
+  return(df_combined)
 }
 
-historical_data <- get_historicaltemperatures(lat= list_coordinates[2],lon= list_coordinates[3])
-
+historical_data <- get_historicaldata(coords[2], coords[3],)
 
 
 #Line Chart: Compares daily temperatures over 7 days at the different times of the day

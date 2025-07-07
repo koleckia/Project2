@@ -35,6 +35,7 @@ get_lat_lon <- function(city="Philadelphia"){
   return(list(city=city,lat=lat,lon=lon))
 }
 
+#Pull in current weather
 get_dailyweather <- function(lat, lon, units = "imperial") {
   baseURL <- "https://api.openweathermap.org/data/3.0/onecall?"
   endpoint <- paste0("lat=", lat, "&lon=", lon, "&units=", units,
@@ -61,39 +62,7 @@ get_dailyweather <- function(lat, lon, units = "imperial") {
   return(df_dailyplots)
 }
 
-
-#Function to get past data from any previous week before January 1979
-get_historicaltemperatures <- function(lat,lon,units="imperial"){
-  #Create vector to have the dates from the week last year 
-  today_date <- Sys.Date()
-  year_ago <- today_date - 365
-  week_year_ago <-as.Date(rep(NA,7))
-  
-  for(i in 0:6){
-    week_year_ago[i+1] <-year_ago + i
-  }
-  
-  #Query API for all dates 
-  results <- list()
-  for(i in 1:length(week_year_ago)){
-    baseURL <-"https://api.openweathermap.org/data/3.0/onecall/day_summary?"
-    endpoint <-paste0("lat=",lat,"&lon=",lon,"&date=",week_year_ago[i],
-                      "&units=",units,
-                      "&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
-    URL_ids <- paste0(baseURL,endpoint)
-    id_info <-httr::GET(URL_ids)
-    str(id_info, max.level = 1)
-    parsed <- fromJSON(rawToChar(id_info$content))
-    results[[i]]<-parsed
-  }
-  
-  #Turn list into a dataframe 
-  df_historical <-as.data.frame(do.call(rbind,results))
-  df_historical <- df_historical |>
-    unnest_wider(c(temperature,cloud_cover,humidity,precipitation,
-                   pressure,wind),names_sep ="_" ) |>
-    unnest_wider(wind_max,names_sep="_")
-}
+#Query past weather 
 
 # Define UI 
 ui <- ui <- dashboardPage(
@@ -101,7 +70,7 @@ ui <- ui <- dashboardPage(
   dashboardSidebar(    
     sidebarMenu(
       menuItem("About", tabName = "about", icon = icon("circle-info")),
-      menuItem("Data Download", tabName = "download", icon = icon("download")),
+      menuItem("Weather Download", tabName = "download", icon = icon("download")),
       menuItem("Data Exploration", tabName = "exploration", icon = icon("chart-simple"))
     )
   ),
@@ -113,10 +82,13 @@ ui <- ui <- dashboardPage(
               titlePanel("About My App"),
               fluidRow(
                 box(title="Purpose of App", background = "light-blue",
-                    "Describe the purpose of the app")),
+                    "App to compare weather conditions to ten years ago in any city")),
               fluidRow(
-                box(title="API Source", background = "light-blue",
-                    "Briefly discuss the data and its source - providing a link to more information about the data")),
+                box(title="API Source: Open Weather", background = "light-blue",
+                    "This data source allows you to get the current and previous weather from any city.
+                   This app currently allows you to pull the current weeks weather as well as weather from a year ago
+                    to compare the change from 10 years ago. Here is a link to the API source for more information: 
+                    https://openweathermap.org/api/one-call-3#history")),
               fluidRow(
                 tabBox(id ="tabset1",height="250px",
                     tabPanel("Data Exploration","Explaination of data exploration tab"),
@@ -126,7 +98,7 @@ ui <- ui <- dashboardPage(
                     "Include a picture related to the data")),
       ),
       tabItem(tabName = "download",
-              titlePanel("Data Download"),
+              titlePanel("Weather Download"),
               textInput(
                 inputId = "city",
                 label = "Please input a city",
