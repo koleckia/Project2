@@ -4,12 +4,14 @@
 #install.packages('tidycensus')
 #install.packages('jsonlite')
 #install.packages("lubridate")
+install.packages("purr")
 library(tidycensus)
 library(jsonlite)
 library(tidyverse)
 library(httr)
 library(lubridate)
 library(ggplot2)
+library(purrr)
 
 
 #Function to obtain lat and log
@@ -49,11 +51,14 @@ get_dailyweather <- function(lat, lon, units = "imperial") {
   
   df_dailyplots <- df_parsed$daily |>
     mutate(date = as.Date(as.POSIXct(dt, origin = "1970-01-01", tz = "UTC"))) |>
-    unnest(weather)|>
-    select(-dt,-sunrise,-sunset,-moonrise,-moonset,-moon_phase,-id,-icon) |>
-    rename_with(~ ifelse(starts_with("temp$"),
-                         sub("temp$", "temperature_", .),
-                         .))
+    unnest(c(temp, feels_like ,weather),names_sep ="_")|>
+    select(-dt,-sunrise,-sunset,-moonrise,-moonset,-moon_phase,-weather_icon,-weather_id) |>
+    rename(temperature_min = temp_min,
+           temperature_max = temp_max,
+           temperature_night = temp_night,
+           temperature_evening = temp_eve,
+           temperature_morning = temp_morn,
+           temperature_day =temp_day)
   
   df_dailyplots <- as.data.frame(df_dailyplots)
   
@@ -61,9 +66,6 @@ get_dailyweather <- function(lat, lon, units = "imperial") {
 }
 
 
-coords <- get_lat_lon("Chicago")
-df <- get_dailyweather(coords[2], coords[3], "imperial")
-View(df)
 
 
 get_historicaldata <- function(lat,lon,units="imperial"){
@@ -119,16 +121,19 @@ get_historicaldata <- function(lat,lon,units="imperial"){
   
   df_results <- df_results|>
     unnest(data) |>
-    unnest(weather) |>
+    unnest(weather,names_sep = "_") |>
     mutate(date = as.Date(as.POSIXct(dt, origin = "1970-01-01", tz = "UTC"))) |>
-    select(-temp,-dt,-sunrise,-sunset,-icon,-id)
+    select(-temp,-dt,-sunrise,-sunset,-weather_icon,-weather_id)
 
   df_combined <- full_join(df_results,df_temperatures,by="date")
   
   return(df_combined)
 }
 
-historical_data <- get_historicaldata(coords[2], coords[3],)
+merged_data <- function(df1,df2){
+  df_merged <-bind_rows(df1,df2)
+  return(df_merged)
+}
 
 
 #Line Chart: Compares daily temperatures over 7 days at the different times of the day

@@ -16,7 +16,6 @@ library(ggplot2)
 library(shinydashboard)
 
 #API Functions 
-#Function to obtain lat and log of any city 
 #Function to obtain lat and log
 get_lat_lon <- function(city="Philadelphia"){
   #Query API using the City 
@@ -35,7 +34,6 @@ get_lat_lon <- function(city="Philadelphia"){
   return(list(city=city,lat=lat,lon=lon))
 }
 
-#Pull in current weather
 get_dailyweather <- function(lat, lon, units = "imperial") {
   baseURL <- "https://api.openweathermap.org/data/3.0/onecall?"
   endpoint <- paste0("lat=", lat, "&lon=", lon, "&units=", units,
@@ -55,14 +53,89 @@ get_dailyweather <- function(lat, lon, units = "imperial") {
   
   df_dailyplots <- df_parsed$daily |>
     mutate(date = as.Date(as.POSIXct(dt, origin = "1970-01-01", tz = "UTC"))) |>
-    unnest(weather)
+    unnest(c(temp, feels_like ,weather),names_sep ="_")|>
+    select(-dt,-sunrise,-sunset,-moonrise,-moonset,-moon_phase,-weather_icon,-weather_id) |>
+    rename(temperature_min = temp_min,
+           temperature_max = temp_max,
+           temperature_night = temp_night,
+           temperature_evening = temp_eve,
+           temperature_morning = temp_morn,
+           temperature_day =temp_day)
   
   df_dailyplots <- as.data.frame(df_dailyplots)
   
   return(df_dailyplots)
 }
 
-#Query past weather 
+
+
+
+get_historicaldata <- function(lat,lon,units="imperial"){
+  #Create vector to have the dates from the week last year 
+  today_date <- Sys.Date()
+  year_ago <- today_date - 365
+  week_year_ago <-as.Date(rep(NA,7))
+  
+  for(i in 0:6){
+    week_year_ago[i+1] <-year_ago + i
+  }
+  
+  #Convert to work in API 
+  week_year_ago_timestamp<-as.numeric(as.POSIXct(paste0(week_year_ago, "17:00:00"), tz ="UTC"))
+  
+  #Query first API for daily temperatures
+  results <- list()
+  for(i in 1:length(week_year_ago)){
+    baseURL <-"https://api.openweathermap.org/data/3.0/onecall/day_summary?"
+    endpoint <-paste0("lat=",lat,"&lon=",lon,"&date=",week_year_ago[i],
+                      "&units=",units,
+                      "&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
+    URL_ids <- paste0(baseURL,endpoint)
+    id_info <-httr::GET(URL_ids)
+    str(id_info, max.level = 1)
+    parsed <- fromJSON(rawToChar(id_info$content))
+    results[[i]]<-parsed
+  }
+  
+  #Turn temperatures list into a dataframe 
+  df_temperatures <-as.data.frame(do.call(rbind,results))
+  df_temperatures <- df_temperatures |>
+    unnest_wider(c(temperature),names_sep ="_" ) |>
+    unnest("date")|>
+    mutate(date=as.Date(date)) |>
+    select("date",starts_with("temperature"))
+  
+  #Query API for rest of weather data
+  list_results <- list()
+  for(i in 1:length(week_year_ago)){
+    baseURL <-"https://api.openweathermap.org/data/3.0/onecall/timemachine?"
+    endpoint <-paste0("lat=",lat,"&lon=",lon,"&dt=",week_year_ago_timestamp [i],
+                      "&units=",units,
+                      "&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
+    URL_ids <- paste0(baseURL,endpoint)
+    id_info <-httr::GET(URL_ids)
+    str(id_info, max.level = 1)
+    parsed <- fromJSON(rawToChar(id_info$content))
+    list_results[[i]]<-parsed
+  }
+  #Turn list into a dataframe 
+  df_results <-as.data.frame(do.call(rbind,list_results))
+  
+  df_results <- df_results|>
+    unnest(data) |>
+    unnest(weather,names_sep = "_") |>
+    mutate(date = as.Date(as.POSIXct(dt, origin = "1970-01-01", tz = "UTC"))) |>
+    select(-temp,-dt,-sunrise,-sunset,-weather_icon,-weather_id)
+  
+  df_combined <- full_join(df_results,df_temperatures,by="date")
+  
+  return(df_combined)
+}
+
+merged_data <- function(df1,df2){
+  df_merged <-bind_rows(df1,df2)
+  return(df_merged)
+}
 
 # Define UI 
 ui <- ui <- dashboardPage(
@@ -134,8 +207,10 @@ server <- function(input, output) {
     if (is.null(coords$lat) || is.null(coords$lon)) {
       return(NULL)
     }
-    df <- get_dailyweather(coords[2], coords[3], input$measurement)
-    return(df)
+    df_daily <- get_dailyweather(coords[2], coords[3], input$measurement)
+    df_historical <- get_historicaldata(coords[2], coords[3], input$measurement)
+    df_weather <- merged_data(df_daily,df_historical)
+    return(df_weather)
   })
   
   output$weather_table <- renderDataTable({
