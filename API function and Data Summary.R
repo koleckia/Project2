@@ -71,7 +71,6 @@ get_historicaltemperatures <- function(lat,lon,units="imperial"){
   #Query API for all dates 
   results <- list()
   for(i in 1:length(week_year_ago)){
-    
   baseURL <-"https://api.openweathermap.org/data/3.0/onecall/day_summary?"
   endpoint <-paste0("lat=",lat,"&lon=",lon,"&date=",week_year_ago[i],
                     "&units=",units,
@@ -81,10 +80,18 @@ get_historicaltemperatures <- function(lat,lon,units="imperial"){
   str(id_info, max.level = 1)
   parsed <- fromJSON(rawToChar(id_info$content))
   results[[i]]<-parsed
+  }
+  
+  #Turn list into a dataframe 
+  df_historical <-as.data.frame(do.call(rbind,results))
+  df_historical <- df_historical |>
+    unnest_wider(c(temperature,cloud_cover,humidity,precipitation,
+                   pressure,wind),names_sep ="_" ) |>
+    unnest_wider(wind_max,names_sep="_")
 }
-  print(results)
-}
+
 historical_data <- get_historicaltemperatures(lat= list_coordinates[2],lon= list_coordinates[3])
+
 
 
 #Line Chart: Compares daily temperatures over 7 days at the different times of the day
@@ -119,7 +126,7 @@ ggplot(df_dailyprecipitationplot, aes(x = date, y = rain)) +
   geom_bar(stat = "identity") +
   labs(title = "Daily Precipitation",
        x = "Date",
-       y = "Precipitation (mm)") +
+       y = "Precipitation (mm)") + 
   theme_minimal()
 
 #Radar: Looks at the day temperature, humidity and wind over 7 days 
