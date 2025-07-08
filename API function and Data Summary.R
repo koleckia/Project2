@@ -12,6 +12,7 @@ library(httr)
 library(lubridate)
 library(ggplot2)
 library(purrr)
+install.packages("ggradar")
 
 
 #API Functions 

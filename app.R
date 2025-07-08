@@ -145,7 +145,8 @@ ui <- ui <- dashboardPage(
     sidebarMenu(
       menuItem("About", tabName = "about", icon = icon("circle-info")),
       menuItem("Weather Download", tabName = "download", icon = icon("download")),
-      menuItem("Data Exploration", tabName = "exploration", icon = icon("chart-simple"))
+      menuItem("Weekly Weather", tabName = "daily_exploration", icon = icon("chart-simple")),
+      menuItem("YoY Weather", tabName = "yoy_exploration", icon = icon("chart-simple"))
     )
   ),
   
@@ -193,9 +194,10 @@ ui <- ui <- dashboardPage(
               dataTableOutput("weather_table"),
               downloadButton("downloadData","Download")
       ),
-      tabItem(tabName = "exploration",
-              titlePanel("Data Exploration"),
-              selectInput(
+      tabItem(tabName = "daily_exploration",
+              titlePanel("Weekly Weather"),
+              fluidRow(
+                box(selectInput(
                 inputId = "data_choice",
                 label = "Select Data Type to View:",
                 choices = c("Temperature"= "temperature", "Feels Like"
@@ -203,14 +205,22 @@ ui <- ui <- dashboardPage(
                 selected = "Temperature"
               ),
              plotOutput(outputId = "lineplot")
+      ),
+      box(
+      plotOutput(outputId = "barchart")
       )
-    )
+    )),
+    tabItem(tabName = "yoy_exploration",
+            titlePanel("YoY Weather"))
   )
 )
+)
+)
 
-# Define server logic required to draw a histogram
+# Define Server
 server <- function(input, output) {
   
+  #Query API and Create Table 
   weather_data <- eventReactive(input$go, {
     coords <- get_lat_lon(input$city)
     if (is.null(coords$lat) || is.null(coords$lon)) {
@@ -222,12 +232,13 @@ server <- function(input, output) {
     return(df_weather)
   })
   
-  
+  #Create data table
   output$weather_table <- renderDataTable({
     req(weather_data())
     weather_data()
   })
   
+  #Daily Line Plot Code 
   output$lineplot <- renderPlot({
     
     if(input$data_choice =="temperature") {
@@ -238,6 +249,8 @@ server <- function(input, output) {
                    names_to= "time_of_day",
                    values_to = "value") |>
       mutate(time_of_day = sub("^temperature_", "", time_of_day))
+    
+    y_axis <- "Actual Temperature"
 }
     else if(input$data_choice == "feels_like") {
     df_plot<- weather_data() |>
@@ -249,23 +262,45 @@ server <- function(input, output) {
       mutate(time_of_day = sub("^feels_like_", "", time_of_day))|>
       mutate(time_of_day = ifelse(time_of_day =="morn","morning",
                                   ifelse(time_of_day=="eve","evening",time_of_day)))
-    
+    y_axis <-"Real Feels"
     }
     
     # Plot
     ggplot(df_plot, aes(x = date, y = value, color = time_of_day)) +
       geom_line(size = 1.1) +
       labs(
-        title = "Temperature vs. Feels Like by Time of Day (2025)",
+        title = "Comparing Weekly Real Feels to Actual Temperature",
         x = "Date",
-        y = "Value",
+        y = y_axis,
         color = "Time of Day"
       ) +
       theme_minimal()
     
   })
   
-  # Downloadable csv of selected dataset ----
+  #Create daily bar chart
+  output$barchart <- renderPlot({
+    
+    df_plot <- weather_data() |>
+      filter(format(as.Date(date), "%Y") == "2025") |>
+      select(date,rain,wind_speed,humidity) |>
+      mutate(rain =ifelse(is.na(rain),0,rain))
+    
+    # Plot
+    ggplot(df_plot , aes(x = date, y = rain)) +
+      geom_bar(stat = "identity") +
+      geom_text(aes(label = rain), vjust = -0.3, size = 3)+
+      labs(title = "Daily Precipitation",
+           x = "Date",
+           y = "Precipitation (mm)") + 
+      theme_minimal()
+    
+  })
+  
+  #Create Daily Heat Map 
+  
+  
+  # Allow to download csv file
   output$downloadData <- downloadHandler(
     filename = function() {
       paste0("weather_data_", input$city, ".csv")
