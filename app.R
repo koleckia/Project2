@@ -21,7 +21,7 @@ library(shinydashboard)
 get_lat_lon <- function(city="Philadelphia"){
   #Query API using the City 
   baseURL <-"http://api.openweathermap.org/geo/1.0/direct?"
-  endpoint <-paste0("q=",city,"&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
+  endpoint <-paste0("q=",city,"&appid=281a260e2af06dbb7c75a3ceed72b558")
   URL_ids <- paste0(baseURL,endpoint)
   id_info <-httr::GET(URL_ids)
   str(id_info, max.level = 1)
@@ -39,7 +39,7 @@ get_lat_lon <- function(city="Philadelphia"){
 get_dailyweather <- function(lat, lon, units = "imperial") {
   baseURL <- "https://api.openweathermap.org/data/3.0/onecall?"
   endpoint <- paste0("lat=", lat, "&lon=", lon, "&units=", units,
-                     "&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
+                     "&appid=281a260e2af06dbb7c75a3ceed72b558")
   URL_ids <- paste0(baseURL, endpoint)
   id_info <- httr::GET(URL_ids)
   
@@ -86,7 +86,7 @@ get_historicaldata <- function(lat,lon,units="imperial"){
     baseURL <-"https://api.openweathermap.org/data/3.0/onecall/day_summary?"
     endpoint <-paste0("lat=",lat,"&lon=",lon,"&date=",week_year_ago[i],
                       "&units=",units,
-                      "&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
+                      "&appid=281a260e2af06dbb7c75a3ceed72b558")
     URL_ids <- paste0(baseURL,endpoint)
     id_info <-httr::GET(URL_ids)
     str(id_info, max.level = 1)
@@ -109,7 +109,7 @@ get_historicaldata <- function(lat,lon,units="imperial"){
     baseURL <-"https://api.openweathermap.org/data/3.0/onecall/timemachine?"
     endpoint <-paste0("lat=",lat,"&lon=",lon,"&dt=",week_year_ago_timestamp [i],
                       "&units=",units,
-                      "&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
+                      "&appid=281a260e2af06dbb7c75a3ceed72b558")
     URL_ids <- paste0(baseURL,endpoint)
     id_info <-httr::GET(URL_ids)
     str(id_info, max.level = 1)
@@ -193,6 +193,15 @@ ui <- dashboardPage(
                 ),
                 selected = "imperial"
               ),
+              selectInput(
+                inputId = "subset",
+                label = "Select Subset Of Data:",
+                choices = c(
+                  "Temperature" = "temperature",
+                  "YoY Forecast" = "YoY",
+                  "Elements Data" = "elements"
+                ),
+              ),
               actionButton("go", "Generate data set"),
               br(), br(),
               dataTableOutput("weather_table"),
@@ -267,18 +276,55 @@ server <- function(input, output) {
     return(df_weather)
   })
   
-  #Create data table
-  output$weather_table <- renderDataTable({
-    req(weather_data())
-    weather_data()
+  subset_weather_data <- reactive({
+    req(weather_data())  # Ensures data is ready
+    data <- weather_data()
+    
+    if (input$subset == 'temperature') {
+      data |>
+        filter(format(as.Date(date), "%Y") == "2025") |>
+        select(date, starts_with("temperature_"), -temperature_min, -temperature_max, -temperature_afternoon) |>
+        pivot_longer(cols = starts_with("temperature_"),
+                     names_to = "time_of_day",
+                     values_to = "temperature") |>
+        mutate(time_of_day = sub("^temperature_", "", time_of_day))
+      
+    } else if (input$subset == 'elements') {
+      data |>
+        filter(format(as.Date(date), "%Y") == "2025") |>
+        select(date, rain, wind_speed, humidity) |>
+        mutate(rain = ifelse(is.na(rain), 0, rain))
+      
+    } else if (input$subset == 'YoY') {
+      data |>
+        select(date, temperature_min, temperature_max, humidity, wind_speed) |>
+        pivot_longer(cols = -date, names_to = "variable", values_to = "value")
+    } else {
+      NULL
+    }
   })
   
+  #Create data table
+  output$weather_table <- renderDataTable({
+    subset_weather_data()
+  })
+  
+  
+  # Allow to download csv file
+  output$downloadData <- downloadHandler(
+    filename = function() {
+      paste0("weather_data_", input$subset, ".csv")
+    },
+    content = function(file) {
+      write.csv(subset_weather_data(), file, row.names = FALSE)
+    }
+  )
   
   output$avg_temp_box <- renderValueBox({
     avg_temp <- mean(weather_data()$temperature_day, na.rm = TRUE)
     valueBox(
       value = paste0(round(avg_temp, 1), " °"),
-      subtitle = "Average Day Temperature",
+      subtitle = "Average Weekly Temperature",
       icon = icon("thermometer-half"),
       color = "yellow"
     )
@@ -288,7 +334,7 @@ server <- function(input, output) {
     avg_hum <- mean(weather_data()$humidity, na.rm = TRUE)
     valueBox(
       value = paste0(round(avg_hum, 0), " %"),
-      subtitle = "Average Humidity",
+      subtitle = "Average Weekly Humidity",
       icon = icon("droplet"),
       color = "blue"
     )
@@ -297,9 +343,9 @@ server <- function(input, output) {
   output$max_rain <- renderValueBox({
     rain <- max(weather_data()$rain, na.rm = TRUE)
     valueBox(
-      value = paste0(round(rain, 1), " mph"),
-      subtitle = "Max Rain",
-      icon = icon("rain"),
+      value = round(rain, 1),
+      subtitle = "Max Rain This Week",
+      icon = icon("droplet"),
       color = "aqua"
     )
   })
@@ -418,20 +464,6 @@ server <- function(input, output) {
   
   
   
-  # Allow to download csv file
-  output$downloadData <- downloadHandler(
-    filename = function() {
-      paste0("weather_data_", input$city, ".csv")
-    },
-    content = function(file) {
-      
-      # Get the reactive result
-      data <- weather_data()
-      df_weather <- data[,!sapply(data,is.list)]
-     
-      write.csv(df_weather, file, row.names = FALSE)
-    }
-  )
 }
 
 # Run the application 
