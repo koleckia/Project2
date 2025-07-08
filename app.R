@@ -320,7 +320,7 @@ server <- function(input, output) {
     }
   )
   
-  output$avg_temp_box <- renderValueBox({
+  output$avg_temp <- renderValueBox({
     avg_temp <- mean(weather_data()$temperature_day, na.rm = TRUE)
     valueBox(
       value = paste0(round(avg_temp, 1), " °"),
@@ -330,7 +330,7 @@ server <- function(input, output) {
     )
   })
   
-  output$avg_humidity_box <- renderValueBox({
+  output$avg_humidity <- renderValueBox({
     avg_hum <- mean(weather_data()$humidity, na.rm = TRUE)
     valueBox(
       value = paste0(round(avg_hum, 0), " %"),
@@ -375,10 +375,10 @@ server <- function(input, output) {
     
     merged_plot <- full_join(df_feels_like, df_temperature, by = c("date", "time_of_day"))
     
-    df_long <- merged_plot |>
+    df_plot <- merged_plot |>
       pivot_longer(cols = c("Feels Like", "temperature"), names_to = "variable", values_to = "value")
     
-    base_plot <- ggplot(df_long, aes(x = date, y = value, color = time_of_day)) +
+    line_plot <- ggplot(df_plot, aes(x = date, y = value, color = time_of_day)) +
       geom_line(size = 1.1) +
       scale_x_date(date_breaks = "1 day", date_labels = "%b %d") +
       labs(
@@ -388,18 +388,18 @@ server <- function(input, output) {
         color = "Time of Day"
       ) +
       theme(
-        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.x = element_text(angle = 50, hjust = 1),
         panel.grid.major.x = element_blank(),
         panel.grid.minor.x = element_blank()
       )
     
     # Dynamic faceting
     if (input$facet_choice == "variable") {
-      base_plot + facet_wrap(~ variable, scales = "free_y")
+      line_plot + facet_wrap(~ variable, scales = "free_y")
     } else if (input$facet_choice == "time_of_day") {
-      base_plot + facet_wrap(~ time_of_day, scales = "free_y")
+      line_plot + facet_wrap(~ time_of_day, scales = "free_y")
     } else {
-      base_plot
+      line_plot
     }
     
   })
@@ -416,13 +416,13 @@ server <- function(input, output) {
     ggplot(df_bar, aes(x = date, y = .data[[input$data_choice2]])) +
       geom_bar(stat = "identity") +
       scale_x_date(date_breaks = "1 day", date_labels = "%b %d")+
-      geom_text(aes(label = .data[[input$data_choice2]]), vjust = -0.5) +
+      geom_text(aes(label = round(.data[[input$data_choice2]],1)), vjust = -0.5) +
       labs(title = paste("Daily", input$data_choice2),,
            x = "Date",
-           y = "Precipitation (mm)") +
+           y = input$data_choice2) +
         theme(
           axis.text.x = element_text(angle = 45, hjust = 1),
-          panel.grid.major.x = element_blank(),  # remove vertical grid lines
+          panel.grid.major.x = element_blank(),  
           panel.grid.minor.x = element_blank()
         )
     }
@@ -430,7 +430,8 @@ server <- function(input, output) {
     ggplot(df_bar, aes(x = date, y = .data[[input$data_choice2]])) +
       geom_line(color = "blue") +
       geom_point() +
-      scale_x_date(date_breaks = "1 week", date_labels = "%b %d") +
+        geom_text(aes(label = round(.data[[input$data_choice2]],1)), vjust = -0.5)+
+      scale_x_date(date_breaks = "1 day", date_labels = "%b %d") +
       labs(title = paste("Trend of Daily", input$data_choice2),
            x = "Date", y = input$data_choice2) +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
@@ -444,7 +445,7 @@ server <- function(input, output) {
     df_heat <- weather_data() |>
       filter(format(as.Date(date), "%Y") == "2025") |>
       select(date, temperature_min, temperature_max, humidity, wind_speed)|>
-      pivot_longer(cols = -date, names_to = "variable", values_to = "value")
+      pivot_longer(cols = -date, names_to = "variable", values_to = "value") 
     }
     else if(input$data_choice =="2024"){
     df_heat <- weather_data() |>
@@ -456,8 +457,9 @@ server <- function(input, output) {
     ggplot(df_heat, aes(x = date, y = variable, fill = value)) +
       geom_tile() +
       geom_text(aes(label=value))+
-      scale_fill_viridis_c(option = "C") +
-      labs(title = "Daily Forecast In Heat Map", x = "Date", y = "Variable") +
+      scale_x_date(date_breaks = "1 day", date_labels = "%b %d")+
+      labs(title = paste(input$data_choice,"Forecast In Heat Map"), x = "Date", 
+           y = "Weather Elements") +
       theme_minimal() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
