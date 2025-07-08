@@ -195,7 +195,14 @@ ui <- ui <- dashboardPage(
       ),
       tabItem(tabName = "exploration",
               titlePanel("Data Exploration"),
-              numericInput("number", "My Numeric Input", min = 0, max = 10, value = 5)
+              selectInput(
+                inputId = "data_choice",
+                label = "Select Data Type to View:",
+                choices = c("Temperature"= "temperature", "Feels Like"
+                            ="feels_like"),
+                selected = "Temperature"
+              ),
+             plotOutput(outputId = "lineplot")
       )
     )
   )
@@ -215,10 +222,49 @@ server <- function(input, output) {
     return(df_weather)
   })
   
+  
   output$weather_table <- renderDataTable({
     req(weather_data())
     weather_data()
   })
+  
+  output$lineplot <- renderPlot({
+    
+    if(input$data_choice =="temperature") {
+    df_plot <- weather_data() |>
+      filter(format(as.Date(date), "%Y") == "2025") |>
+      select(date,starts_with("temperature_"),-temperature_min, -temperature_max, -temperature_afternoon) |>
+      pivot_longer(cols = starts_with("temperature_"),
+                   names_to= "time_of_day",
+                   values_to = "value") |>
+      mutate(time_of_day = sub("^temperature_", "", time_of_day))
+}
+    else if(input$data_choice == "feels_like") {
+    df_plot<- weather_data() |>
+      filter(format(as.Date(date), "%Y") == "2025") |>
+      select(date,starts_with("feels_like_")) |>
+      pivot_longer(cols = starts_with("feels_like_"),
+                   names_to= "time_of_day",
+                   values_to = "value") |>
+      mutate(time_of_day = sub("^feels_like_", "", time_of_day))|>
+      mutate(time_of_day = ifelse(time_of_day =="morn","morning",
+                                  ifelse(time_of_day=="eve","evening",time_of_day)))
+    
+    }
+    
+    # Plot
+    ggplot(df_plot, aes(x = date, y = value, color = time_of_day)) +
+      geom_line(size = 1.1) +
+      labs(
+        title = "Temperature vs. Feels Like by Time of Day (2025)",
+        x = "Date",
+        y = "Value",
+        color = "Time of Day"
+      ) +
+      theme_minimal()
+    
+  })
+  
   # Downloadable csv of selected dataset ----
   output$downloadData <- downloadHandler(
     filename = function() {

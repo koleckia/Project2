@@ -14,6 +14,7 @@ library(ggplot2)
 library(purrr)
 
 
+#API Functions 
 #Function to obtain lat and log
 get_lat_lon <- function(city="Philadelphia"){
   #Query API using the City 
@@ -124,38 +125,52 @@ get_historicaldata <- function(lat,lon,units="imperial"){
     unnest(weather,names_sep = "_") |>
     mutate(date = as.Date(as.POSIXct(dt, origin = "1970-01-01", tz = "UTC"))) |>
     select(-temp,-dt,-sunrise,-sunset,-weather_icon,-weather_id)
-
+  
   df_combined <- full_join(df_results,df_temperatures,by="date")
   
   return(df_combined)
 }
+
 
 merged_data <- function(df1,df2){
   df_merged <-bind_rows(df1,df2)
   return(df_merged)
 }
 
-df <- merged_data(df,historical_data)
-
 #Line Chart: Compares daily temperatures over 7 days at the different times of the day
 #Using df_daily_plots
 #Reformat data for the plot 
-df_dailytempplot <- df_daily_plots |>
-      select(date,starts_with("temp")) |>
-      unnest(temp) |>
-      pivot_longer(cols = c("day","night","eve","morn"),
+df_temperature <- df1 |>
+  filter(format(as.Date(date), "%Y") == "2025") |>
+      select(date,starts_with("temperature_"),-temperature_min, -temperature_max, -temperature_afternoon) |>
+      pivot_longer(cols = starts_with("temperature_"),
                    names_to= "time_of_day",
                    values_to = "temperature") |>
-      select(-max,-min)
+  mutate(time_of_day = sub("^temperature_", "", time_of_day))
+
+
+df_feels_like<- df1 |>
+  filter(format(as.Date(date), "%Y") == "2025") |>
+  select(date,starts_with("feels_like_")) |>
+  pivot_longer(cols = starts_with("feels_like_"),
+               names_to= "time_of_day",
+               values_to = "Feels Like") |>
+  mutate(time_of_day = sub("^feels_like_", "", time_of_day))|>
+  mutate(time_of_day = ifelse(time_of_day =="morn","morning",
+                              ifelse(time_of_day=="eve","evening",time_of_day)))
+
+
+
 
 #Create Plot 
-ggplot(df_dailytempplot , aes(x = date, y = temperature, color = time_of_day)) +
+ggplot(df_temperature , aes(x = date, y = temperature, color = time_of_day)) +
   geom_line(size = 1.2) +
   labs(title = "Daily Temperatures by Time Of Day",
        x = "Date",
        y = "Temperature",
        color = "Time of Day") +
   theme_minimal() 
+
 
 #Bar Chart: Looks at precipitation levels over the next 7 days
 #Reformat Data for the precipitation plot 
