@@ -152,26 +152,28 @@ ui <- ui <- dashboardPage(
   
   dashboardBody(
     tabItems(
-      #About Tab Set Up 
+      # About Tab
       tabItem(tabName = "about",
               titlePanel("About My App"),
               fluidRow(
-                box(title="Purpose of App", background = "light-blue",
+                box(title = "Purpose of App", background = "light-blue",
                     "App to compare weather conditions to ten years ago in any city")),
               fluidRow(
-                box(title="API Source: Open Weather", background = "light-blue",
+                box(title = "API Source: Open Weather", background = "light-blue",
                     "This data source allows you to get the current and previous weather from any city.
-                   This app currently allows you to pull the current weeks weather as well as weather from a year ago
-                    to compare the change from 10 years ago. Here is a link to the API source for more information: 
-                    https://openweathermap.org/api/one-call-3#history")),
+                   This app currently allows you to pull the current week's weather as well as weather from a year ago
+                   to compare the change from 10 years ago. Here is a link to the API source for more information: 
+                   https://openweathermap.org/api/one-call-3#history")),
               fluidRow(
-                tabBox(id ="tabset1",height="250px",
-                    tabPanel("Data Exploration","Explaination of data exploration tab"),
-                    tabPanel("Data Download", "Explaination of data download tab"))),
+                tabBox(id = "tabset1", height = "250px",
+                       tabPanel("Data Exploration", "Explanation of data exploration tab"),
+                       tabPanel("Data Download", "Explanation of data download tab"))),
               fluidRow(
-                box(title="Picture",background = "light-blue",
-                    "Include a picture related to the data")),
+                box(title = "Picture", background = "light-blue",
+                    "Include a picture related to the data"))
       ),
+      
+      # Download Tab
       tabItem(tabName = "download",
               titlePanel("Weather Download"),
               textInput(
@@ -192,30 +194,45 @@ ui <- ui <- dashboardPage(
               actionButton("go", "Generate data set"),
               br(), br(),
               dataTableOutput("weather_table"),
-              downloadButton("downloadData","Download")
+              downloadButton("downloadData", "Download")
       ),
+      
+      # Weekly Weather Tab
       tabItem(tabName = "daily_exploration",
               titlePanel("Weekly Weather"),
               fluidRow(
                 box(selectInput(
-                inputId = "data_choice",
-                label = "Select Data Type to View:",
-                choices = c("Temperature"= "temperature", "Feels Like"
-                            ="feels_like"),
-                selected = "Temperature"
+                  inputId = "data_choice2",
+                  label = "Select Data Type to View:",
+                  choices = c("Rain" = "rain", 
+                              "Wind" = "wind_speed",
+                              "Humidity" = "humidity"),
+                  selected = "Rain"
+                ),
+                plotOutput(outputId = "barchart"))
               ),
-             plotOutput(outputId = "lineplot")
+              fluidRow(
+                box(plotOutput(outputId = "lineplot"))
+              )
       ),
-      box(
-      plotOutput(outputId = "barchart")
+      
+      # YoY Weather Tab
+      tabItem(tabName = "yoy_exploration",
+              titlePanel("YoY Weather"),
+              fluidRow(
+                box(selectInput(
+                  inputId = "data_choice",
+                  label = "Select Year:",
+                  choices = c("2025" = "2025", "2024" = "2024"),
+                  selected = "2025"
+                ),
+                plotOutput(outputId = "heatmap"))
+              )
       )
-    )),
-    tabItem(tabName = "yoy_exploration",
-            titlePanel("YoY Weather"))
+    )
   )
 )
-)
-)
+
 
 # Define Server
 server <- function(input, output) {
@@ -241,7 +258,6 @@ server <- function(input, output) {
   #Daily Line Plot Code 
   output$lineplot <- renderPlot({
     
-    if(input$data_choice =="temperature") {
     df_plot <- weather_data() |>
       filter(format(as.Date(date), "%Y") == "2025") |>
       select(date,starts_with("temperature_"),-temperature_min, -temperature_max, -temperature_afternoon) |>
@@ -250,9 +266,6 @@ server <- function(input, output) {
                    values_to = "value") |>
       mutate(time_of_day = sub("^temperature_", "", time_of_day))
     
-    y_axis <- "Actual Temperature"
-}
-    else if(input$data_choice == "feels_like") {
     df_plot<- weather_data() |>
       filter(format(as.Date(date), "%Y") == "2025") |>
       select(date,starts_with("feels_like_")) |>
@@ -262,19 +275,26 @@ server <- function(input, output) {
       mutate(time_of_day = sub("^feels_like_", "", time_of_day))|>
       mutate(time_of_day = ifelse(time_of_day =="morn","morning",
                                   ifelse(time_of_day=="eve","evening",time_of_day)))
-    y_axis <-"Real Feels"
-    }
+
+    merged_plot <- full_join(df_feels_like,df_temperature,by=c("date","time_of_day"))
     
-    # Plot
-    ggplot(df_plot, aes(x = date, y = value, color = time_of_day)) +
+    df_long <- merged_plot |>
+      pivot_longer(cols = c("Feels Like", "temperature"), names_to = "variable", values_to = "value")
+    
+    #Line Chart: Compares daily temperatures over 7 days at the different times of the day
+    #Using df_daily_plots
+    #Reformat data for the plot 
+    ggplot(df_long, aes(x = date, y = value, color = time_of_day)) +
       geom_line(size = 1.1) +
       labs(
         title = "Comparing Weekly Real Feels to Actual Temperature",
         x = "Date",
-        y = y_axis,
+        y = "Temperature (°)",  # or customize with y_axis if you're defining it
         color = "Time of Day"
       ) +
+      facet_wrap(~ variable, scales = "free_y") +  # use scales="fixed" if you want same y-axis
       theme_minimal()
+    
     
   })
   
@@ -287,17 +307,41 @@ server <- function(input, output) {
       mutate(rain =ifelse(is.na(rain),0,rain))
     
     # Plot
-    ggplot(df_plot , aes(x = date, y = rain)) +
+    ggplot(df_plot , aes(x = date, y = input$data_choice2)) +
       geom_bar(stat = "identity") +
       geom_text(aes(label = rain), vjust = -0.3, size = 3)+
       labs(title = "Daily Precipitation",
            x = "Date",
            y = "Precipitation (mm)") + 
       theme_minimal()
+  })  
+  
+  #Create daily forecast heat map for current week vs. last year 
+  output$heatmap <- renderPlot({
+    
+    if(input$data_choice == "2025"){
+    df_heat <- weather_data() |>
+      filter(format(as.Date(date), "%Y") == "2025") |>
+      select(date, temperature_min, temperature_max, humidity, wind_speed)|>
+      pivot_longer(cols = -date, names_to = "variable", values_to = "value")
+    }
+    else if(input$data_choice =="2024"){
+    df_heat <- weather_data() |>
+      filter(format(as.Date(date), "%Y") == "2024") |>
+      select(date, temperature_min, temperature_max, humidity, wind_speed)|>
+      pivot_longer(cols = -date, names_to = "variable", values_to = "value")
+    }
+    
+    ggplot(df_heat, aes(x = date, y = variable, fill = value)) +
+      geom_tile() +
+      scale_fill_viridis_c(option = "C") +
+      labs(title = "Weather Variable Heatmap Over Time", x = "Date", y = "Variable") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    
     
   })
   
-  #Create Daily Heat Map 
   
   
   # Allow to download csv file

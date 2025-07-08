@@ -4,6 +4,7 @@
 #install.packages('tidycensus')
 #install.packages('jsonlite')
 #install.packages("lubridate")
+
 install.packages("purr")
 library(tidycensus)
 library(jsonlite)
@@ -12,6 +13,9 @@ library(httr)
 library(lubridate)
 library(ggplot2)
 library(purrr)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
 install.packages("ggradar")
 
 
@@ -127,7 +131,7 @@ get_historicaldata <- function(lat,lon,units="imperial"){
     mutate(date = as.Date(as.POSIXct(dt, origin = "1970-01-01", tz = "UTC"))) |>
     select(-temp,-dt,-sunrise,-sunset,-weather_icon,-weather_id)
   
-  df_combined <- full_join(df_results,df_temperatures,by="date")
+  df_combined <- left_join(df_heat,df_temperature,by="date")
   
   return(df_combined)
 }
@@ -138,16 +142,24 @@ merged_data <- function(df1,df2){
   return(df_merged)
 }
 
+merged_plot <- full_join(df_feels_like,df_temperature,by=c("date","time_of_day"))
+
+df_long <- merged_plot |>
+  pivot_longer(cols = c("Feels Like", "temperature"), names_to = "variable", values_to = "value")
+
 #Line Chart: Compares daily temperatures over 7 days at the different times of the day
 #Using df_daily_plots
 #Reformat data for the plot 
-df_temperature <- df1 |>
-  filter(format(as.Date(date), "%Y") == "2025") |>
-      select(date,starts_with("temperature_"),-temperature_min, -temperature_max, -temperature_afternoon) |>
-      pivot_longer(cols = starts_with("temperature_"),
-                   names_to= "time_of_day",
-                   values_to = "temperature") |>
-  mutate(time_of_day = sub("^temperature_", "", time_of_day))
+ggplot(df_long, aes(x = date, y = value, color = time_of_day)) +
+  geom_line(size = 1.1) +
+  labs(
+    title = "Comparing Weekly Real Feels to Actual Temperature",
+    x = "Date",
+    y = "Temperature (°)",  # or customize with y_axis if you're defining it
+    color = "Time of Day"
+  ) +
+  facet_wrap(~ variable, scales = "free_y") +  # use scales="fixed" if you want same y-axis
+  theme_minimal()
 
 
 df_feels_like<- df1 |>
@@ -188,9 +200,15 @@ ggplot(df_dailyprecipitationplot, aes(x = date, y = rain)) +
        y = "Precipitation (mm)") + 
   theme_minimal()
 
-#Radar: Looks at the day temperature, humidity and wind over 7 days 
-#Reformat the Radar data 
-df_dailyradarplot<- df_daily_plots |>
-  unnest(temp) |>
-  select(date,day,humidity,wind_speed) 
+#Make heat map of weather conditions 
+df_heat <- weather_data |>
+  filter(format(as.Date(date), "%Y") == "2025") |>
+  select(date, temperature_day, temperature_night, humidity, rain, wind_speed)|>
+  pivot_longer(cols = -date, names_to = "variable", values_to = "value")
 
+ggplot(df_heat, aes(x = date, y = variable, fill = value)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "C") +
+  labs(title = "Weather Variable Heatmap Over Time", x = "Date", y = "Variable") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
