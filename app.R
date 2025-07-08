@@ -146,9 +146,26 @@ ui <- dashboardPage(
     sidebarMenu(
       menuItem("About", tabName = "about", icon = icon("circle-info")),
       menuItem("Weather Download", tabName = "download", icon = icon("download")),
-      menuItem("Weather Data Exploration", tabName = "daily_exploration", icon = icon("chart-simple"))
-    )
-  ),
+      menuItem("Weather Data Exploration", tabName = "daily_exploration", icon = icon("chart-simple")),
+      selectInput(
+        inputId = "temp_choice",
+        label = "Select Temperature Statistic:",
+        choices = c("Mean", "Min", "Max"),
+        selected = "Mean"
+      )),
+      selectInput(
+        inputId = "hum_choice",
+        label = "Select Humidity Statistic:",
+        choices = c("Mean", "Min", "Max"),
+        selected = "Mean"
+      ),
+      selectInput(
+        inputId = "rain_choice",
+        label = "Select Rain Statistic:",
+        choices = c("Mean", "Min", "Max"),
+        selected = "Mean"
+      )
+    ),
   
   dashboardBody(
     tabItems(
@@ -212,9 +229,9 @@ ui <- dashboardPage(
       tabItem(tabName = "daily_exploration",
               titlePanel("Weekly Weather"),
               fluidRow(
-                valueBoxOutput("avg_temp"),
-                valueBoxOutput("avg_humidity"),
-                valueBoxOutput("max_rain"),
+                valueBoxOutput("temp_value"),
+                valueBoxOutput("hum_value"),
+                valueBoxOutput("rain_value"),
               ),
               fluidRow(
                 box(selectInput(
@@ -320,32 +337,52 @@ server <- function(input, output) {
     }
   )
   
-  output$avg_temp <- renderValueBox({
-    avg_temp <- mean(weather_data()$temperature_day, na.rm = TRUE)
+  output$temp_value <- renderValueBox({
+    temp_2025 <- weather_data() |>
+      filter(format(as.Date(date), "%Y") == "2025")
+    
+    temp_value <- switch(input$temp_choice,
+                       "Mean" = mean(temp_2025$temperature_day, na.rm = TRUE),
+                       "Min"  = min(temp_2025$temperature_day, na.rm = TRUE),
+                       "Max"  = max(temp_2025$temperature_day, na.rm = TRUE))
     valueBox(
-      value = paste0(round(avg_temp, 1), " °"),
-      subtitle = "Average Weekly Temperature",
+      value = paste0(round(temp_value, 1), " °"),
+      subtitle = paste(input$temp_choice, "Weekly Temperature"),
       icon = icon("thermometer-half"),
       color = "yellow"
     )
   })
   
-  output$avg_humidity <- renderValueBox({
-    avg_hum <- mean(weather_data()$humidity, na.rm = TRUE)
+  output$hum_value  <- renderValueBox({
+    hum_2025 <- weather_data() |>
+      filter(format(as.Date(date), "%Y") == "2025")
+    
+    hum_value <- switch(input$hum_choice,
+                         "Mean" = mean(hum_2025$humidity, na.rm = TRUE),
+                         "Min"  = min(hum_2025$humidity, na.rm = TRUE),
+                         "Max"  = max(hum_2025$humidity, na.rm = TRUE))
     valueBox(
-      value = paste0(round(avg_hum, 0), " %"),
-      subtitle = "Average Weekly Humidity",
+      value = paste0(round(hum_value, 0), " %"),
+      subtitle = paste(input$hum_choice, "Weekly Humdity"),
       icon = icon("droplet"),
       color = "blue"
     )
   })
   
-  output$max_rain <- renderValueBox({
-    rain <- max(weather_data()$rain, na.rm = TRUE)
+  output$rain_value <- renderValueBox({
+    rain_2025 <- weather_data() |>
+      filter(format(as.Date(date), "%Y") == "2025")
+    
+    rain_value <- switch(input$rain_choice,
+                        "Mean" = mean(rain_2025$rain, na.rm = TRUE),
+                        "Min"  = min(rain_2025$rain, na.rm = TRUE),
+                        "Max"  = max(rain_2025$rain, na.rm = TRUE))
+    
+
     valueBox(
-      value = round(rain, 1),
-      subtitle = "Max Rain This Week",
-      icon = icon("droplet"),
+      value = paste0(round(rain_value, 0), " %"),
+      subtitle = paste(input$rain_choice, "Weekly rain"),
+      icon = icon("umbrella"),
       color = "aqua"
     )
   })
