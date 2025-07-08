@@ -131,7 +131,7 @@ get_historicaldata <- function(lat,lon,units="imperial"){
     mutate(date = as.Date(as.POSIXct(dt, origin = "1970-01-01", tz = "UTC"))) |>
     select(-temp,-dt,-sunrise,-sunset,-weather_icon,-weather_id)
   
-  df_combined <- left_join(df_heat,df_temperature,by="date")
+  df_combined <- left_join(df_results,df_temperatures,by="date")
   
   return(df_combined)
 }
@@ -142,7 +142,7 @@ merged_data <- function(df1,df2){
   return(df_merged)
 }
 
-merged_plot <- full_join(df_feels_like,df_temperature,by=c("date","time_of_day"))
+
 
 df_long <- merged_plot |>
   pivot_longer(cols = c("Feels Like", "temperature"), names_to = "variable", values_to = "value")
@@ -187,13 +187,19 @@ ggplot(df_temperature , aes(x = date, y = temperature, color = time_of_day)) +
 
 #Bar Chart: Looks at precipitation levels over the next 7 days
 #Reformat Data for the precipitation plot 
-df_dailyprecipitationplot <- df_daily_plots |>
+df_dailyprecipitationplot <- weather_data |>
+  filter(format(as.Date(date), "%Y") == "2025") |>
   select(date,rain) |>
+  mutate(rain =ifelse(is.na(rain),0,rain))
+
+df_plot <- weather_data |>
+  filter(format(as.Date(date), "%Y") == "2025") |>
+  select(date,rain,wind_speed,humidity) |>
   mutate(rain =ifelse(is.na(rain),0,rain))
 
 
 #Create Plot 
-ggplot(df_dailyprecipitationplot, aes(x = date, y = rain)) +
+ggplot(df_plot, aes(x = date, y = wind_speed)) +
   geom_bar(stat = "identity") +
   labs(title = "Daily Precipitation",
        x = "Date",
@@ -212,3 +218,45 @@ ggplot(df_heat, aes(x = date, y = variable, fill = value)) +
   labs(title = "Weather Variable Heatmap Over Time", x = "Date", y = "Variable") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#Create Weather Data 
+
+weather_data_coords <- get_lat_lon("Portland")
+weather_data <-get_dailyweather(weather_data_coords[2],weather_data_coords[3],)
+weather_data2 <-get_historicaldata(weather_data_coords[2],weather_data_coords[3],)
+weather_data <- merged_data(weather_data,weather_data2)
+
+df_temperature <- weather_data |>
+  filter(format(as.Date(date), "%Y") == "2025") |>
+  select(date,starts_with("temperature_"),-temperature_min, -temperature_max, -temperature_afternoon) |>
+  pivot_longer(cols = starts_with("temperature_"),
+               names_to= "time_of_day",
+               values_to = "temperature") |>
+  mutate(time_of_day = sub("^temperature_", "", time_of_day))
+
+df_feels_like <- weather_data |>
+  filter(format(as.Date(date), "%Y") == "2025") |>
+  select(date,starts_with("feels_like_")) |>
+  pivot_longer(cols = starts_with("feels_like_"),
+               names_to= "time_of_day",
+               values_to = "Feels Like") |>
+  mutate(time_of_day = sub("^feels_like_", "", time_of_day))|>
+  mutate(time_of_day = ifelse(time_of_day =="morn","morning",
+                              ifelse(time_of_day=="eve","evening",time_of_day)))
+
+merged_plot <- full_join(df_feels_like,df_temperature,by=c("date","time_of_day"))
+
+df_long <- merged_plot |>
+  pivot_longer(cols = c("Feels Like", "temperature"), names_to = "variable", values_to = "value")
+
+ggplot(df_long, aes(x = date, y = value, color = time_of_day)) +
+  geom_line(size = 1.1) +
+  labs(
+    title = "Comparing Weekly Real Feels to Actual Temperature",
+    x = "Date",
+    y = "Temperature (°)",  
+    color = "Time of Day"
+  ) +
+  facet_wrap(~ variable, scales = "free_y") +  
+  theme_minimal()
+

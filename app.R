@@ -139,14 +139,13 @@ merged_data <- function(df1,df2){
 }
 
 # Define UI 
-ui <- ui <- dashboardPage(
+ui <- dashboardPage(
   dashboardHeader(title="Weather App"),
   dashboardSidebar(    
     sidebarMenu(
       menuItem("About", tabName = "about", icon = icon("circle-info")),
       menuItem("Weather Download", tabName = "download", icon = icon("download")),
-      menuItem("Weekly Weather", tabName = "daily_exploration", icon = icon("chart-simple")),
-      menuItem("YoY Weather", tabName = "yoy_exploration", icon = icon("chart-simple"))
+      menuItem("Weekly Weather", tabName = "daily_exploration", icon = icon("chart-simple"))
     )
   ),
   
@@ -209,16 +208,18 @@ ui <- ui <- dashboardPage(
                               "Humidity" = "humidity"),
                   selected = "Rain"
                 ),
-                plotOutput(outputId = "barchart"))
+                selectInput(
+                  inputId = "chart_choice",
+                  label = "Select Chart Type:",
+                  choices = c("Barchart" = "barchart", "Linechart" = "Linechart"),
+                  selected = "Barchart"
+                ),
+                plotOutput(outputId = "barchart")
+                )
               ),
               fluidRow(
                 box(plotOutput(outputId = "lineplot"))
-              )
-      ),
-      
-      # YoY Weather Tab
-      tabItem(tabName = "yoy_exploration",
-              titlePanel("YoY Weather"),
+              ),
               fluidRow(
                 box(selectInput(
                   inputId = "data_choice",
@@ -227,11 +228,12 @@ ui <- ui <- dashboardPage(
                   selected = "2025"
                 ),
                 plotOutput(outputId = "heatmap"))
-              )
+              ),
       )
     )
   )
 )
+
 
 
 # Define Server
@@ -258,42 +260,45 @@ server <- function(input, output) {
   #Daily Line Plot Code 
   output$lineplot <- renderPlot({
     
-    df_plot <- weather_data() |>
+    df_temperature <- weather_data() |>
       filter(format(as.Date(date), "%Y") == "2025") |>
       select(date,starts_with("temperature_"),-temperature_min, -temperature_max, -temperature_afternoon) |>
       pivot_longer(cols = starts_with("temperature_"),
                    names_to= "time_of_day",
-                   values_to = "value") |>
+                   values_to = "temperature") |>
       mutate(time_of_day = sub("^temperature_", "", time_of_day))
     
-    df_plot<- weather_data() |>
+    df_feels_like <- weather_data() |>
       filter(format(as.Date(date), "%Y") == "2025") |>
       select(date,starts_with("feels_like_")) |>
       pivot_longer(cols = starts_with("feels_like_"),
                    names_to= "time_of_day",
-                   values_to = "value") |>
+                   values_to = "Feels Like") |>
       mutate(time_of_day = sub("^feels_like_", "", time_of_day))|>
       mutate(time_of_day = ifelse(time_of_day =="morn","morning",
                                   ifelse(time_of_day=="eve","evening",time_of_day)))
-
+    
     merged_plot <- full_join(df_feels_like,df_temperature,by=c("date","time_of_day"))
     
     df_long <- merged_plot |>
       pivot_longer(cols = c("Feels Like", "temperature"), names_to = "variable", values_to = "value")
     
-    #Line Chart: Compares daily temperatures over 7 days at the different times of the day
-    #Using df_daily_plots
-    #Reformat data for the plot 
+  
     ggplot(df_long, aes(x = date, y = value, color = time_of_day)) +
       geom_line(size = 1.1) +
+      scale_x_date(date_breaks = "1 day", date_labels = "%b %d") +
       labs(
         title = "Comparing Weekly Real Feels to Actual Temperature",
         x = "Date",
-        y = "Temperature (°)",  # or customize with y_axis if you're defining it
+        y = "Temperature (°)",  
         color = "Time of Day"
       ) +
-      facet_wrap(~ variable, scales = "free_y") +  # use scales="fixed" if you want same y-axis
-      theme_minimal()
+      facet_wrap(~ variable, scales = "free_y") +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.x = element_blank(),  # remove vertical grid lines
+        panel.grid.minor.x = element_blank()
+      )
     
     
   })
@@ -301,19 +306,35 @@ server <- function(input, output) {
   #Create daily bar chart
   output$barchart <- renderPlot({
     
-    df_plot <- weather_data() |>
+    df_bar <- weather_data() |>
       filter(format(as.Date(date), "%Y") == "2025") |>
       select(date,rain,wind_speed,humidity) |>
       mutate(rain =ifelse(is.na(rain),0,rain))
     
+    if(input$chart_choice == "barchart"){
     # Plot
-    ggplot(df_plot , aes(x = date, y = input$data_choice2)) +
+    ggplot(df_bar, aes(x = date, y = .data[[input$data_choice2]])) +
       geom_bar(stat = "identity") +
-      geom_text(aes(label = rain), vjust = -0.3, size = 3)+
-      labs(title = "Daily Precipitation",
+      scale_x_date(date_breaks = "1 day", date_labels = "%b %d")+
+      geom_text(aes(label = .data[[input$data_choice2]]), vjust = -0.5) +
+      labs(title = paste("Daily", input$data_choice2),,
            x = "Date",
-           y = "Precipitation (mm)") + 
-      theme_minimal()
+           y = "Precipitation (mm)") +
+        theme(
+          axis.text.x = element_text(angle = 45, hjust = 1),
+          panel.grid.major.x = element_blank(),  # remove vertical grid lines
+          panel.grid.minor.x = element_blank()
+        )
+    }
+    else if (input$chart_choice == "Linechart"){
+    ggplot(df_bar, aes(x = date, y = .data[[input$data_choice2]])) +
+      geom_line(color = "blue") +
+      geom_point() +
+      scale_x_date(date_breaks = "1 week", date_labels = "%b %d") +
+      labs(title = paste("Trend of Daily", input$data_choice2),
+           x = "Date", y = input$data_choice2) +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    }
   })  
   
   #Create daily forecast heat map for current week vs. last year 
