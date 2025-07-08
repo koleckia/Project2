@@ -132,6 +132,7 @@ get_historicaldata <- function(lat,lon,units="imperial"){
   return(df_combined)
 }
 
+
 merged_data <- function(df1,df2){
   df_merged <-bind_rows(df1,df2)
   return(df_merged)
@@ -189,7 +190,8 @@ ui <- ui <- dashboardPage(
               ),
               actionButton("go", "Generate data set"),
               br(), br(),
-              dataTableOutput("weather_table")
+              dataTableOutput("weather_table"),
+              downloadButton("downloadData","Download")
       ),
       tabItem(tabName = "exploration",
               titlePanel("Data Exploration"),
@@ -217,6 +219,20 @@ server <- function(input, output) {
     req(weather_data())
     weather_data()
   })
+  # Downloadable csv of selected dataset ----
+  output$downloadData <- downloadHandler(
+    filename = function() {
+      paste0("weather_data_", input$city, ".csv")
+    },
+    content = function(file) {
+      
+      # Get the reactive result
+      data <- weather_data()
+      df_weather <- data[,!sapply(data,is.list)]
+     
+      write.csv(df_weather, file, row.names = FALSE)
+    }
+  )
   
 }
 

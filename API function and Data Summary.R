@@ -135,6 +135,7 @@ merged_data <- function(df1,df2){
   return(df_merged)
 }
 
+df <- merged_data(df,historical_data)
 
 #Line Chart: Compares daily temperatures over 7 days at the different times of the day
 #Using df_daily_plots
