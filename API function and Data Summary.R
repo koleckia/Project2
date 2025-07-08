@@ -24,7 +24,7 @@ install.packages("ggradar")
 get_lat_lon <- function(city="Philadelphia"){
   #Query API using the City 
   baseURL <-"http://api.openweathermap.org/geo/1.0/direct?"
-  endpoint <-paste0("q=",city,"&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
+  endpoint <-paste0("q=",city,"&appid=281a260e2af06dbb7c75a3ceed72b558")
   URL_ids <- paste0(baseURL,endpoint)
   id_info <-httr::GET(URL_ids)
   str(id_info, max.level = 1)
@@ -41,7 +41,7 @@ get_lat_lon <- function(city="Philadelphia"){
 get_dailyweather <- function(lat, lon, units = "imperial") {
   baseURL <- "https://api.openweathermap.org/data/3.0/onecall?"
   endpoint <- paste0("lat=", lat, "&lon=", lon, "&units=", units,
-                     "&appid=a2a0e6a4de5aa1eed7f2d631ad8848ff")
+                     "&appid=281a260e2af06dbb7c75a3ceed72b558")
   URL_ids <- paste0(baseURL, endpoint)
   id_info <- httr::GET(URL_ids)
   
