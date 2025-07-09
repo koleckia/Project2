@@ -178,8 +178,8 @@ ui <- dashboardPage(
               titlePanel("About My App"),
               fluidRow(
                 box(title = "Purpose of App", background = "teal",
-                    "The purpose of this app is to compare the weather conditions of a couple cities from today to 
-                    exactly one year ago.")),
+                    "The purpose of this app is to compare the weather conditions from today to 
+                    exactly one year ago, choosing from a list of different cities.")),
               fluidRow(
                 box(title = "API Source: Open Weather", 
                     background = "teal",
@@ -188,10 +188,12 @@ ui <- dashboardPage(
                     <a href='https://openweathermap.org/api/one-call-3#history' target='_blank'>OpenWeather One Call API</a>"))),
               fluidRow(
                 tabBox(id = "tabset1", height = "250px",
-                       tabPanel("Data Exploration", "In the data exploration tab, you can analyze the current forecast of a city of your choosing and
-                                compare that forecast to what the weather was exactly one year ago."),
+                       tabPanel("Data Exploration", "In the data exploration tab, you can analyze the current forecast of a city and
+                                compare that forecast to what the weather was exactly one year ago.You can also analyze the mean, max and min 
+                                of multiple weather metrics and graph them in a variety of ways."),
                        tabPanel("Data Download", "The data download tab lets you select a city and a unit of measurement and will provide 
-                                you the data from this current week as well as the weather from exactly one year ago in that location."))),
+                                you the data from this current week as well as the weather from exactly one year ago in that location. You can choose
+                                to look at the different temperatures by time of day, different weather elements occuring, and the YoY forecast."))),
               fluidRow(
                 box(title = "Weather is cool!",
                      width = 6,
@@ -399,7 +401,7 @@ server <- function(input, output) {
     
 
     valueBox(
-      value = paste0(round(rain_value, 0), " %"),
+      value = paste0(round(rain_value, 0), "in."),
       subtitle = paste(input$rain_choice, "Weekly rain"),
       icon = icon("umbrella"),
       color = "aqua"
@@ -439,7 +441,7 @@ server <- function(input, output) {
       geom_line(size = 1.1) +
       scale_x_date(date_breaks = "1 day", date_labels = "%b %d") +
       labs(
-        title = "Comparing Daily Temperatures Throughout The Day",
+        title = "Comparing Current Temperatures Throughout The Day",
         x = "Date",
         y = "Temperature",
         color = "Time of Day"
@@ -476,7 +478,7 @@ server <- function(input, output) {
       geom_bar(stat = "identity", fill= "blue") +
       scale_x_date(date_breaks = "1 day", date_labels = "%b %d")+
       geom_text(aes(label = round(.data[[input$data_choice2]],0)), vjust = -0.5) +
-      labs(title = paste("Daily", input$data_choice2),
+      labs(title = paste("Current Weeks", input$data_choice2),
            x = "Date",
            y = input$data_choice2) +
         theme(
@@ -491,7 +493,7 @@ server <- function(input, output) {
       geom_point() +
         geom_text(aes(label = round(.data[[input$data_choice2]],0)), vjust = -0.5)+
       scale_x_date(date_breaks = "1 day", date_labels = "%b %d") +
-      labs(title = paste("Daily", input$data_choice2),
+      labs(title = paste("Current Weeks", input$data_choice2),
            x = "Date", y = input$data_choice2) +
       theme(axis.text.x = element_text(angle = 45))
     }
@@ -517,7 +519,7 @@ server <- function(input, output) {
       geom_tile() +
       geom_text(aes(label=value))+
       scale_x_date(date_breaks = "1 day", date_labels = "%b %d")+
-      scale_fill_viridis()+
+      scale_fill_viridis_c()+
       labs(title = paste(input$data_choice,"Forecast In Heat Map"), x = "Date", 
            y = "Weather Elements") +
       theme_minimal() +
