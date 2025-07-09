@@ -21,3 +21,5 @@
  
 #The shiny:: runGitHub() code that we can copy and paste into RStudio to run 
 #your app
+
+#runGitHub("Project2","koleckia")

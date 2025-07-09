@@ -151,7 +151,7 @@ ui <- dashboardPage(
     ),
     #Functions to allow the user to change statistics on the data exploration tab
     conditionalPanel(
-      condition = "input.sidebar === 'daily_exploration'",
+      condition = "input.sidebar == 'daily_exploration'",
       radioButtons(
         inputId = "temp_choice",
         label = "Select Temperature Statistic:",
@@ -208,7 +208,6 @@ ui <- dashboardPage(
                   "Seattle" = "Seattle",
                   "Chicago" = "Chicago",
                   "Portland" = "Portland",
-                  "Spokane"="Spokane",
                   "Nashville" = "Nashville"
                   )
               ),
