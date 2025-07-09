@@ -17,7 +17,7 @@ library(shinydashboard)
 
 #Set Up the API Functions
 
-#Function to obtain lat and log
+#Function to obtain lat and log of the cities 
 get_lat_lon <- function(city="Philadelphia"){
   #Query API using the City 
   baseURL <-"http://api.openweathermap.org/geo/1.0/direct?"
@@ -120,7 +120,7 @@ get_historicaldata <- function(lat,lon,units="imperial"){
   #Turn list into a dataframe 
   df_results <-as.data.frame(do.call(rbind,list_results))
   
-  #Modify dataframe to be able to merge with the weather dataframe 
+  #Modify dataframe to be able to merge with the temperature dataframe 
   df_results <- df_results|>
     unnest(data) |>
     unnest(weather,names_sep = "_") |>
@@ -141,46 +141,51 @@ merged_data <- function(df1,df2){
 
 # Define UI function
 ui <- dashboardPage(
-  dashboardHeader(title="Weather App"),
-  dashboardSidebar(    
-    sidebarMenu(
+  dashboardHeader(title="Weather Graphs"),
+  dashboardSidebar( 
+    #Create tabs 
+    sidebarMenu(id = "sidebar", 
       menuItem("About", tabName = "about", icon = icon("circle-info")),
       menuItem("Weather Download", tabName = "download", icon = icon("download")),
-      menuItem("Weather Data Exploration", tabName = "daily_exploration", icon = icon("chart-simple")),
-      selectInput(
+      menuItem("Weather Data Exploration", tabName = "daily_exploration", icon = icon("chart-simple"))
+    ),
+    #Functions to allow the user to change statistics on the data exploration tab
+    conditionalPanel(
+      condition = "input.sidebar === 'daily_exploration'",
+      radioButtons(
         inputId = "temp_choice",
         label = "Select Temperature Statistic:",
         choices = c("Mean", "Min", "Max"),
         selected = "Mean"
-      )),
-      selectInput(
+      ),
+      radioButtons(
         inputId = "hum_choice",
         label = "Select Humidity Statistic:",
         choices = c("Mean", "Min", "Max"),
         selected = "Mean"
       ),
-      selectInput(
+      radioButtons(
         inputId = "rain_choice",
         label = "Select Rain Statistic:",
         choices = c("Mean", "Min", "Max"),
         selected = "Mean"
       )
-    ),
-  
+    )),
   dashboardBody(
     tabItems(
       # About Tab
       tabItem(tabName = "about",
               titlePanel("About My App"),
               fluidRow(
-                box(title = "Purpose of App", background = "light-blue",
-                    "The purpose of this app is to compare the weather conditions of most cities from today to 
+                box(title = "Purpose of App", background = "teal",
+                    "The purpose of this app is to compare the weather conditions of a couple cities from today to 
                     exactly one year ago.")),
               fluidRow(
-                box(title = "API Source: Open Weather", background = "light-blue",
-                    "This data source allows you to get the current and previous weather from any city.
+                box(title = "API Source: Open Weather", 
+                    background = "teal",
+                    HTML("This data source allows you to get the current and previous weather from a list of cities.
                     Here is a link to the API source for more information: 
-                   https://openweathermap.org/api/one-call-3#history")),
+                    <a href='https://openweathermap.org/api/one-call-3#history' target='_blank'>OpenWeather One Call API</a>"))),
               fluidRow(
                 tabBox(id = "tabset1", height = "250px",
                        tabPanel("Data Exploration", "In the data exploration tab, you can analyze the current forecast of a city of your choosing and
@@ -188,17 +193,24 @@ ui <- dashboardPage(
                        tabPanel("Data Download", "The data download tab lets you select a city and a unit of measurement and will provide 
                                 you the data from this current week as well as the weather from exactly one year ago in that location."))),
               fluidRow(
-                box(title = "Picture", background = "light-blue",
-                    "Include a picture related to the data"))
-      ),
-      
-      # Download Tab
+                box(title = "Weather is cool!",
+                     width = 6,
+                     img(src = "lightning.png", height = "200px", width = "100%"))
+      )),
+      # Download Tab that allows you to pick a city and unit of measurement
+      #This also allows you to choose through 3 subsets of data to download
       tabItem(tabName = "download",
               titlePanel("Weather Download"),
-              textInput(
+              selectInput(
                 inputId = "city",
-                label = "Please input a city",
-                placeholder = "Enter city here"
+                label = "Please select a city",
+                choices = c(
+                  "Seattle" = "Seattle",
+                  "Chicago" = "Chicago",
+                  "Portland" = "Portland",
+                  "Spokane"="Spokane",
+                  "Nashville" = "Nashville"
+                  )
               ),
               selectInput(
                 inputId = "measurement",
@@ -220,12 +232,16 @@ ui <- dashboardPage(
                 ),
               ),
               actionButton("go", "Generate data set"),
-              br(), br(),
+              br(), 
+              br(),
+              br(),
+              br(),
               dataTableOutput("weather_table"),
               downloadButton("downloadData", "Download")
       ),
       
-      # Weekly Weather Tab
+      # This is the data exploration tab with 3 graphs and 3 summary statistics
+      #One of the graphs does change between a bar and line graph
       tabItem(tabName = "daily_exploration",
               titlePanel("Weekly Weather"),
               fluidRow(
@@ -233,7 +249,7 @@ ui <- dashboardPage(
                 valueBoxOutput("hum_value"),
                 valueBoxOutput("rain_value"),
               ),
-              fluidRow(
+              fluidRow(width ="100%",
                 box(selectInput(
                   inputId = "data_choice2",
                   label = "Select Data Type to View:",
@@ -251,7 +267,7 @@ ui <- dashboardPage(
                 plotOutput(outputId = "barchart")
                 )
               ),
-              fluidRow(
+              fluidRow(width = "100%",
                 box(
                   selectInput(
                     inputId = "facet_choice",
@@ -262,7 +278,7 @@ ui <- dashboardPage(
                   plotOutput(outputId = "lineplot")
                 )
               ),
-              fluidRow(
+              fluidRow(width ="100%",
                 box(selectInput(
                   inputId = "data_choice",
                   label = "Select Year:",
@@ -281,7 +297,7 @@ ui <- dashboardPage(
 # Define Server
 server <- function(input, output) {
   
-  #Query API and Create Table 
+  #Query API and Create Table with all data 
   weather_data <- eventReactive(input$go, {
     coords <- get_lat_lon(input$city)
     if (is.null(coords$lat) || is.null(coords$lon)) {
@@ -293,8 +309,9 @@ server <- function(input, output) {
     return(df_weather)
   })
   
+  #Retrieves the subset of data based on the users choice 
   subset_weather_data <- reactive({
-    req(weather_data())  # Ensures data is ready
+    
     data <- weather_data()
     
     if (input$subset == 'temperature') {
@@ -316,18 +333,16 @@ server <- function(input, output) {
       data |>
         select(date, temperature_min, temperature_max, humidity, wind_speed) |>
         pivot_longer(cols = -date, names_to = "variable", values_to = "value")
-    } else {
-      NULL
     }
   })
   
-  #Create data table
+  #Create data table shown in the app 
   output$weather_table <- renderDataTable({
     subset_weather_data()
   })
   
   
-  # Allow to download csv file
+  #Code to allow the user to download the csv
   output$downloadData <- downloadHandler(
     filename = function() {
       paste0("weather_data_", input$subset, ".csv")
@@ -337,6 +352,9 @@ server <- function(input, output) {
     }
   )
   
+  #Add conditional panel
+  
+  #This allows for the user to change the value box for temperature
   output$temp_value <- renderValueBox({
     temp_2025 <- weather_data() |>
       filter(format(as.Date(date), "%Y") == "2025")
@@ -353,6 +371,7 @@ server <- function(input, output) {
     )
   })
   
+  #This allows for the user to change the value box for humidity
   output$hum_value  <- renderValueBox({
     hum_2025 <- weather_data() |>
       filter(format(as.Date(date), "%Y") == "2025")
@@ -369,6 +388,7 @@ server <- function(input, output) {
     )
   })
   
+  #This allows for the user to change the value box for rain
   output$rain_value <- renderValueBox({
     rain_2025 <- weather_data() |>
       filter(format(as.Date(date), "%Y") == "2025")
@@ -389,7 +409,8 @@ server <- function(input, output) {
   
   
   
-  #Daily Line Plot Code 
+  #This creates a line plot for temperature that can be faceted between time of day or 
+  #real feel vs. actual temperature 
   output$lineplot <- renderPlot({
     
     df_temperature <- weather_data() |>
@@ -430,7 +451,7 @@ server <- function(input, output) {
         panel.grid.minor.x = element_blank()
       )
     
-    # Dynamic faceting
+    
     if (input$facet_choice == "variable") {
       line_plot + facet_wrap(~ variable, scales = "free_y")
     } else if (input$facet_choice == "time_of_day") {
@@ -440,38 +461,40 @@ server <- function(input, output) {
     }
     
   })
-  #Create daily bar chart
+  #Creates a chart for different weather elements and allows the user 
+  #to change between a line chart and a bar chart 
+  
   output$barchart <- renderPlot({
     
-    df_bar <- weather_data() |>
+    df_plot <- weather_data() |>
       filter(format(as.Date(date), "%Y") == "2025") |>
       select(date,rain,wind_speed,humidity) |>
-      mutate(rain =ifelse(is.na(rain),0,rain))
+      mutate(rain =ifelse(is.na(rain),0,rain)) 
     
     if(input$chart_choice == "barchart"){
     # Plot
-    ggplot(df_bar, aes(x = date, y = .data[[input$data_choice2]])) +
-      geom_bar(stat = "identity") +
+    ggplot(df_plot, aes(x = date, y = .data[[input$data_choice2]])) +
+      geom_bar(stat = "identity", fill= "blue") +
       scale_x_date(date_breaks = "1 day", date_labels = "%b %d")+
-      geom_text(aes(label = round(.data[[input$data_choice2]],1)), vjust = -0.5) +
-      labs(title = paste("Daily", input$data_choice2),,
+      geom_text(aes(label = round(.data[[input$data_choice2]],0)), vjust = -0.5) +
+      labs(title = paste("Daily", input$data_choice2),
            x = "Date",
            y = input$data_choice2) +
         theme(
-          axis.text.x = element_text(angle = 45, hjust = 1),
+          axis.text.x = element_text(angle = 45),
           panel.grid.major.x = element_blank(),  
           panel.grid.minor.x = element_blank()
         )
     }
     else if (input$chart_choice == "Linechart"){
-    ggplot(df_bar, aes(x = date, y = .data[[input$data_choice2]])) +
+    ggplot(df_plot, aes(x = date, y = .data[[input$data_choice2]])) +
       geom_line(color = "blue") +
       geom_point() +
-        geom_text(aes(label = round(.data[[input$data_choice2]],1)), vjust = -0.5)+
+        geom_text(aes(label = round(.data[[input$data_choice2]],0)), vjust = -0.5)+
       scale_x_date(date_breaks = "1 day", date_labels = "%b %d") +
-      labs(title = paste("Trend of Daily", input$data_choice2),
+      labs(title = paste("Daily", input$data_choice2),
            x = "Date", y = input$data_choice2) +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      theme(axis.text.x = element_text(angle = 45))
     }
   })  
   
@@ -495,14 +518,14 @@ server <- function(input, output) {
       geom_tile() +
       geom_text(aes(label=value))+
       scale_x_date(date_breaks = "1 day", date_labels = "%b %d")+
+      scale_fill_viridis()+
       labs(title = paste(input$data_choice,"Forecast In Heat Map"), x = "Date", 
            y = "Weather Elements") +
       theme_minimal() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
   
-  
-  
+
 }
 
 # Run the application 
