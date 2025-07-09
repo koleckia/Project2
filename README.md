@@ -14,10 +14,13 @@
 #lubridate
 #ggplot2
 #shinydashboard
+#tidyr
+#dplyr
+
 
 #A line of code that would install would install all the packages used
  
-#install.packages(c('ggplot2', 'shiny','tidycensus','jsonlite','tidyverse','httr','lubridate','shinydashboard'))
+#install.packages(c('ggplot2', 'shiny','tidycensus','jsonlite','tidyverse','httr','lubridate','shinydashboard','tidyr','dplyr))
  
 #The shiny:: runGitHub() code that we can copy and paste into RStudio to run 
 #your app
